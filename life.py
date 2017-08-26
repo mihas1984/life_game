@@ -11,10 +11,10 @@ import random
 # определяем размеры информационного поля и полный размер окна с его учетом 
 # определяем цвета всех элементов
 
-SCREEN_X = 1024
+SCREEN_X = 1280
 SCREEN_Y = 768
 
-CELL_SIZE = 16
+CELL_SIZE = 8
 FONT_SIZE = max(CELL_SIZE, 16)
 
 TEXT_ZONE = int(FONT_SIZE * 2.5)
@@ -22,10 +22,10 @@ SCREEN_Y_WITH_TEXT = SCREEN_Y + TEXT_ZONE
 
 #*** BACKGROUND = 'fon.png'
 
-BACKGROUND_COLOR = (0, 0, 0)
-CELL_COLOR = (0, 128, 0)
+BACKGROUND_COLOR = (0, 0, 128)
+CELL_COLOR = (255, 255, 0)
 
-TEXT_BACKGROUND_COLOR = (0, 0, 30)
+TEXT_BACKGROUND_COLOR = (0, 0, 0)
 
 TEXT_COLOR_1 = (255, 0, 0)
 TEXT_COLOR_2 = (0, 255, 255)
@@ -37,6 +37,14 @@ NUMBER_X = SCREEN_X // CELL_SIZE
 NUMBER_Y = SCREEN_Y // CELL_SIZE
 
 DELAY = 0
+
+# сколько должно быть рядом живых клеток, чтоб появилась новая и 
+# сколько должно быть рядом живых клеток, чтоб не умирала живая
+
+NEAR_TO_BORN = 3
+NEAR_TO_LIVE = 2
+
+DATA_FILE = 'data.txt'
 
 # класс клетки, есть ли клетки в этом месте, и какие у нее кооридинаты в единицах размера ячейки
 
@@ -86,6 +94,31 @@ class Box:
     def clear(self):
         self.__init__()
 
+# сохранение и загрузка ящика из файла с данными
+
+    def save(self, datafile):
+        with open(datafile, 'w') as data:
+            data.write(str(NUMBER_X) + '\n' + str(NUMBER_Y) + '\n')
+            for x in range(NUMBER_X):
+                for y in range(NUMBER_Y):
+                    data.write(str(int(self.box[x][y].is_cell)))
+
+    def load(self, datafile):
+        try:
+            with open(datafile, 'r') as data_file:
+                data = data_file.read().split('\n')
+                if int(data[0]) != NUMBER_X or int(data[1]) != NUMBER_Y:
+                    print('Поле неверного размера, невозможно загрузить')
+                else:
+                    for x in range(NUMBER_X):
+                        for y in range(NUMBER_Y):
+                            if data[2][x*NUMBER_Y + y] == '1':
+                                 self.box[x][y].is_cell = True
+                            else: 
+                                 self.box[x][y].is_cell = False
+        except:
+            print('Файл для загрузки отсутствует или имеет неверный формат')
+
 # обновление ящика
 # для каждой клетки на поле посчитать количество соседей с учетом замкнутости поля, т.е. соседом
 # для первой клетки будет последняя по х и у
@@ -124,9 +157,9 @@ class Box:
 
         for x in range(NUMBER_X):
             for y in range(NUMBER_Y):
-                if self.near[x][y] == 3:
+                if self.near[x][y] == NEAR_TO_BORN:
                     self.box[x][y].is_cell = True
-                elif not (self.near[x][y] == 2 and self.box[x][y].is_cell):
+                elif not (self.near[x][y] == NEAR_TO_LIVE and self.box[x][y].is_cell):
                     self.box[x][y].is_cell = False
 
                 if self.box[x][y].is_cell:
@@ -144,7 +177,8 @@ def prepare():
     while not exit:
 
 # если нажали крестик - выйти из подготовки и из игры, если нажали пробел или ввод - вышли из подготовки и запустили
-# главный цикл игры, если нажали r - заполнили поле случайно клетками, c - очистили поле
+# главный цикл игры, если нажали r - заполнили поле случайно клетками, c - очистили поле,
+# s - сохранить данные в фыйл, l - прочитать данные из файла,
 # если нажата клавиша мыши, определяем ее координаты, переводим координаты из пикселей в номер ячейки (с учетом ширины 
 # текстовой зоны вверху экрана, и меняем клетку в ячейке, если ее не было - создаем, если была - убираем
 
@@ -160,6 +194,10 @@ def prepare():
                     screen_box.random()
                 elif event.key == pygame.K_c:
                     screen_box.clear()
+                elif event.key == pygame.K_s:
+                    screen_box.save(DATA_FILE)
+                elif event.key == pygame.K_l:
+                    screen_box.load(DATA_FILE)
             if event.type == pygame.MOUSEBUTTONDOWN:
                 pos = pygame.mouse.get_pos()                      
                 if pos[1] > TEXT_ZONE:
@@ -179,7 +217,7 @@ def prepare():
         font_base.fill(TEXT_BACKGROUND_COLOR) 
         score_font = pygame.font.SysFont("comicsansms", FONT_SIZE)
         result = score_font.render("Установите клетки и нажмите пробел для запуска игры. Ход: " + str(turn), 1, TEXT_COLOR_1)
-        result_2 = score_font.render("Для случайного распределения нажмите r, для очистки экрана нажмите c", 1, TEXT_COLOR_2)
+        result_2 = score_font.render("Для случайного распределения нажмите r, для очистки экрана нажмите c, для сохранения/загрузки поля нажмите s/l", 1, TEXT_COLOR_2)
         font_base.blit(result, (0, 0))
         font_base.blit(result_2, (0, FONT_SIZE))
 
@@ -254,12 +292,14 @@ if __name__ == '__main__':
     screen = pygame.Surface((SCREEN_X, SCREEN_Y))
     pygame.font.init()
 
-# обнуляем ход, генерируем пустой ящий, в котором будет происходить жизнь
+# обнуляем ход, генерируем пустой ящий, в котором будет происходить жизнь,
+# если есть - загружаем сохраненное поле
 
     turn = 0 
 
     new_game = True
     screen_box = Box()
+    screen_box.load(DATA_FILE)
 
 # главный цикл игры, запускаем подготовку, если не надо после нее выходить, то запускаем игру
 
